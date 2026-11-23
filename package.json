@@ -1,0 +1,24 @@
+{
+  "name": "jibika-quest",
+  "private": true,
+  "version": "0.1.0",
+  "description": "耳鼻科クエスト（仮称）— iPhone縦画面の2DアクションRPG（PWA）",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "test": "vitest run",
+    "icons": "npx tsx scripts/make-icons.ts"
+  },
+  "dependencies": {
+    "idb-keyval": "^6.3.0",
+    "phaser": "4.2.1"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.1.1"
+  }
+}
