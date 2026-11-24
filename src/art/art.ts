@@ -162,6 +162,19 @@ function registerEffects(scene: Phaser.Scene): void {
     ctx.fillRect(0, 0, 20, 20);
     scene.textures.addCanvas('fx_swell', c);
   }
+  // 走りの煙（💨）：灰色の縁取り付きの白い雲3粒（明るい床でも見えるように）
+  {
+    const [c, ctx] = makeCanvas(12, 9);
+    const puffs: [number, number, number][] = [[3, 5, 2], [6, 3, 3], [9, 5, 2]]; // 中心x, 中心y, 半径
+    const disc = (cx: number, cy: number, r: number) => {
+      for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r + 1) ctx.fillRect(cx + x, cy + y, 1, 1);
+    };
+    ctx.fillStyle = '#8a7a8e';
+    for (const [x, y, r] of puffs) disc(x, y, r + 1);
+    ctx.fillStyle = '#ffffff';
+    for (const [x, y, r] of puffs) disc(x, y, r);
+    scene.textures.addCanvas('fx_dust', c);
+  }
   // 影
   {
     const [c, ctx] = makeCanvas(12, 4);

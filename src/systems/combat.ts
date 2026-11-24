@@ -53,3 +53,22 @@ export function nearestInRange<T extends { x: number; y: number }>(
   }
   return best;
 }
+
+export const HIT_PER_FOCUS = 0.015; // 集中1ポイントあたりの命中補正
+export const HIT_MIN = 0.5;
+export const HIT_MAX = 1;
+
+/**
+ * 命中率 ＝ 100% − 敵の回避 ＋ 集中×1.5%（50〜100%）。
+ * 必中の武器（吸引の杖）は常に100%。
+ */
+export function hitChance(focus: number, evade: number, sureHit: boolean): number {
+  if (sureHit) return 1;
+  const p = 1 - evade + Math.max(0, focus) * HIT_PER_FOCUS;
+  return Math.min(HIT_MAX, Math.max(HIT_MIN, p));
+}
+
+/** 命中判定（rng は 0以上1未満） */
+export function rollHit(chance: number, rng: () => number): boolean {
+  return rng() < chance;
+}

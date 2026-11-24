@@ -11,6 +11,7 @@ export interface WeaponDef {
   range: number; // 攻撃射程（px）
   cooldown: number; // 通常攻撃の間隔（秒）
   mult: number; // 威力倍率
+  sureHit: boolean; // 必中（敵の回避を無視する）
   gameEffect: string; // ゲーム効果の説明
   special: { name: string; cooldown: number; desc: string };
   motif: string; // 医学的背景（一般名）。詳細な医学的説明は v0.2 で台帳から表示
@@ -25,7 +26,8 @@ export const WEAPONS: Record<string, WeaponDef> = {
     range: 24,
     cooldown: 0.42,
     mult: 1.0,
-    gameEffect: '近接・速攻。クリティカルが出やすい。耳垢は取れない',
+    sureHit: false,
+    gameEffect: '近接・速攻。クリティカルが出やすいが、素早い敵には外れることがある。耳垢は取れない',
     special: { name: '三連突き', cooldown: 5, desc: '目の前の敵を素早く3回突く' },
     motif: '耳科用の針（ピック）',
     medicalIds: [],
@@ -37,7 +39,8 @@ export const WEAPONS: Record<string, WeaponDef> = {
     range: 56,
     cooldown: 0.6,
     mult: 0.7,
-    gameEffect: '少し離れた敵を吸って攻撃。耳垢の塊を取り除ける',
+    sureHit: true,
+    gameEffect: '少し離れた敵を吸って攻撃。必ず当たる。耳垢の塊を取り除ける',
     special: { name: '吸い寄せ', cooldown: 4, desc: '周囲の敵を引き寄せ、耳垢をまとめて吸う' },
     motif: '吸引管',
     medicalIds: [],
@@ -53,6 +56,7 @@ export interface EnemyDef {
   hp: number;
   atk: number;
   def: number;
+  evade: number; // 回避率（0〜1）。刃の命中率から引く
   speed: number; // 追跡時 px/秒
   wander: number; // 徘徊時 px/秒
   sight: number; // 発見距離 px
@@ -65,22 +69,22 @@ export interface EnemyDef {
 export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   hoteri: {
     kind: 'hoteri', name: 'ホテリ', motif: '炎症',
-    hp: 18, atk: 4, def: 0, speed: 28, wander: 14, sight: 70, exp: 6, group: 1,
+    hp: 18, atk: 4, def: 0, evade: 0, speed: 28, wander: 14, sight: 70, exp: 6, group: 1,
     weak: { blade: 1.0, suction: 1.0 }, medicalIds: [],
   },
   pneumo: {
     kind: 'pneumo', name: 'ニューモ兄弟', motif: '肺炎球菌',
-    hp: 15, atk: 5, def: 0, speed: 42, wander: 18, sight: 80, exp: 7, group: 2,
+    hp: 15, atk: 5, def: 0, evade: 0.05, speed: 42, wander: 18, sight: 80, exp: 7, group: 2,
     weak: { blade: 1.2, suction: 0.8 }, medicalIds: ['MED-AOM-02'],
   },
   hflu: {
     kind: 'hflu', name: 'ヘモフィ', motif: 'インフルエンザ菌（無莢膜型）',
-    hp: 9, atk: 3, def: 0, speed: 60, wander: 30, sight: 90, exp: 4, group: 3,
+    hp: 9, atk: 3, def: 0, evade: 0.15, speed: 60, wander: 30, sight: 90, exp: 4, group: 3,
     weak: { blade: 0.9, suction: 1.5 }, medicalIds: ['MED-AOM-02'],
   },
   morax: {
     kind: 'morax', name: 'モラクセ姉妹', motif: 'モラクセラ・カタラーリス',
-    hp: 20, atk: 4, def: 1, speed: 36, wander: 16, sight: 80, exp: 7, group: 2,
+    hp: 20, atk: 4, def: 1, evade: 0.05, speed: 36, wander: 16, sight: 80, exp: 7, group: 2,
     weak: { blade: 1.2, suction: 0.9 }, medicalIds: ['MED-AOM-02'],
   },
 };
@@ -98,3 +102,19 @@ export const ITEMS: Record<string, ItemDef> = {
 
 /** 耳垢の塊（敵ではなく除去対象）。耳垢は本来、外耳道を守る生理的なもの */
 export const CERUMEN = { hp: 6, suctionDamage: 2 };
+
+/** 防具・アクセサリー（v0.1.1 では未登場。「明るさ」の仕組みだけ先に用意する） */
+export interface GearDef {
+  id: string;
+  name: string;
+  slot: 'armor' | 'acc';
+  light?: number; // 明かりの半径への加算（px）。例：v0.2 の検査用ヘッドライト・内視鏡モチーフ
+  motif: string;
+  medicalIds: string[];
+}
+
+export const GEARS: Record<string, GearDef> = {};
+
+export function gearLight(id: string): number | undefined {
+  return GEARS[id]?.light;
+}

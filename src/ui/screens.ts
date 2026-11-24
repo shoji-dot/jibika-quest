@@ -33,7 +33,7 @@ export function showTitle(existing: SaveData | null): Promise<SaveData> {
     el.innerHTML = `
       <div class="title-wrap">
         <div class="title-logo">耳鼻科クエスト</div>
-        <p class="title-sub">〜 聴界アウリスの響き 〜　試遊版 v0.1</p>
+        <p class="title-sub">〜 聴界アウリスの響き 〜　試遊版 v0.1.1</p>
         <div id="hero-slot"></div>
         <div class="title-btns">
           ${existing ? `<button class="pbtn primary wide" data-continue>つづきから（${escapeHtml(existing.series.name)} Lv${existing.apps.ear.level}）</button>` : ''}

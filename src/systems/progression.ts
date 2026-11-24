@@ -11,7 +11,7 @@ export const STAT_LABELS: Record<StatKey, { name: string; desc: string }> = {
   str: { name: '筋力', desc: '攻撃力が上がる' },
   def: { name: '守り', desc: '受けるダメージが減る' },
   agi: { name: '身のこなし', desc: '移動が速くなる' },
-  foc: { name: '集中', desc: 'クリティカル率が上がる' },
+  foc: { name: '集中', desc: 'クリティカル・命中・明かりが上がる' },
 };
 
 export type Stats = Record<StatKey, number>;
@@ -75,6 +75,7 @@ export interface Derived {
   def: number;
   speed: number; // px/秒
   crit: number; // 0〜1
+  hitBonus: number; // 命中補正（0〜）。集中1ポイントで +1.5%
 }
 
 /** レベルとステータスから実際の能力値を計算する */
@@ -85,5 +86,6 @@ export function derive(level: number, s: Stats): Derived {
     def: 1.5 * s.def,
     speed: 64 + 3 * s.agi,
     crit: Math.min(0.5, 0.05 + 0.02 * s.foc),
+    hitBonus: 0.015 * s.foc,
   };
 }

@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   addExp, allocate, derive, emptyStats, expToNext, resetAllocation, LEVEL_CAP, type ProgressState,
 } from '../src/systems/progression';
-import { calcDamage, contactDamage, nearestInRange } from '../src/systems/combat';
-import { stickVector, knobOffset } from '../src/systems/input';
+import { calcDamage, contactDamage, nearestInRange, hitChance, rollHit } from '../src/systems/combat';
+import { stickVector, knobOffset, facingFrom } from '../src/systems/input';
 import {
   createNewSave, decodeSaveCode, encodeSaveCode, migrate, normalizeName, validateSave, DEFAULT_NAME, SCHEMA_VERSION,
 } from '../src/systems/save';
@@ -73,6 +73,7 @@ describe('成長：ステータス配分', () => {
     expect(d.def).toBe(3);
     expect(d.speed).toBe(67);
     expect(d.crit).toBe(0.5); // 上限
+    expect(d.hitBonus).toBeCloseTo(0.45);
   });
 });
 
@@ -97,6 +98,21 @@ describe('戦闘', () => {
     expect(contactDamage(4, 3)).toBe(3); // 4 - 1.5 = 2.5 → 3
     expect(contactDamage(1, 10)).toBe(1);
   });
+  it('命中率：100%−回避＋集中×1.5%、50〜100%に制限', () => {
+    expect(hitChance(0, 0, false)).toBe(1);
+    expect(hitChance(0, 0.15, false)).toBeCloseTo(0.85);
+    expect(hitChance(4, 0.15, false)).toBeCloseTo(0.91);
+    expect(hitChance(20, 0.15, false)).toBe(1); // 上限
+    expect(hitChance(0, 0.9, false)).toBe(0.5); // 下限
+  });
+  it('必中は常に100%', () => {
+    expect(hitChance(0, 0.9, true)).toBe(1);
+  });
+  it('命中判定', () => {
+    expect(rollHit(0.85, () => 0.84)).toBe(true);
+    expect(rollHit(0.85, () => 0.85)).toBe(false);
+    expect(rollHit(1, () => 0.9999)).toBe(true);
+  });
   it('射程内で最も近い対象', () => {
     const ts = [{ x: 30, y: 0, id: 'a' }, { x: 10, y: 10, id: 'b' }, { x: 100, y: 0, id: 'c' }];
     expect(nearestInRange(0, 0, 40, ts)?.id).toBe('b');
@@ -116,6 +132,22 @@ describe('仮想スティック', () => {
   it('つまみは半径内に制限', () => {
     expect(knobOffset(0, 0, 30, 40, 25)).toEqual({ x: 15, y: 20 });
     expect(knobOffset(0, 0, 3, 4, 25)).toEqual({ x: 3, y: 4 });
+  });
+});
+
+describe('主人公の向き', () => {
+  it('縦横の大きい方で4方向が決まる', () => {
+    expect(facingFrom(1, 0.2, 'down')).toBe('right');
+    expect(facingFrom(-0.8, 0.5, 'down')).toBe('left');
+    expect(facingFrom(0.3, -0.9, 'down')).toBe('up');
+    expect(facingFrom(0.1, 0.6, 'up')).toBe('down');
+  });
+  it('入力がほぼ無ければ直前の向きのまま', () => {
+    expect(facingFrom(0, 0, 'left')).toBe('left');
+    expect(facingFrom(0.05, -0.05, 'up')).toBe('up');
+  });
+  it('斜め45度は縦を優先', () => {
+    expect(facingFrom(0.7, 0.7, 'left')).toBe('down');
   });
 });
 

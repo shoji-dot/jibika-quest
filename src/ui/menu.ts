@@ -1,5 +1,6 @@
 // メニュー（ステータス・装備・道具・セーブ・設定）
-import { ITEMS, WEAPONS } from '../data/gameData';
+import { ITEMS, WEAPONS, gearLight } from '../data/gameData';
+import { equipmentLight, lightRadius } from '../systems/lighting';
 import { allocate, expToNext, LEVEL_CAP, STAT_KEYS, STAT_LABELS } from '../systems/progression';
 import { decodeSaveCode, encodeSaveCode } from '../systems/save';
 import { bus, derived, ear, store } from '../game/store';
@@ -83,6 +84,8 @@ function body(): string {
           <div class="stat"><span>守り</span><span class="v">${d.def}</span></div>
           <div class="stat"><span>移動の速さ</span><span class="v">${d.speed}</span></div>
           <div class="stat"><span>クリティカル率</span><span class="v">${Math.round(d.crit * 100)}%</span></div>
+          <div class="stat"><span>命中補正</span><span class="v">+${(d.hitBonus * 100).toFixed(1)}%</span></div>
+          <div class="stat"><span>明かりの広さ</span><span class="v">${lightRadius(e.stats.foc, equipmentLight(e.equipment, gearLight))}</span></div>
         </div>
         <h3>ステータス配分（残り ${e.statPoints} ポイント）</h3>
         <div class="card">${stats}</div>
@@ -145,7 +148,7 @@ function body(): string {
           <b>C：攻撃ボタン</b><p>「攻撃」ボタンを押している間だけ攻撃します。</p></div>
         <h3>この版について</h3>
         <div class="card">
-          <p>耳鼻科クエスト 試遊版 v0.1.0</p>
+          <p>耳鼻科クエスト 試遊版 v0.1.1</p>
           <p class="note">ドット絵・プログラムはすべて自作です（外部素材なし）。医学的な内容は監修中で、ゲーム上の演出は医学的事実と異なる場合があります。</p>
           <p class="note">PC：WASD/矢印で移動、J 攻撃、K 特殊、L 持替、I 道具</p>
         </div>`;

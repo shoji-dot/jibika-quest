@@ -2,9 +2,11 @@
 import Phaser from 'phaser';
 import { registerArt } from '../art/art';
 import { buildMap, regionAtRow, ISTHMUS_CERUMEN_ROWS, MAP_H, MAP_W, TILE, WALKABLE, type MapData, type Spawn } from '../data/map';
-import { CERUMEN, ENEMIES, ITEMS, WEAPONS, type EnemyDef } from '../data/gameData';
-import { calcDamage, contactDamage, nearestInRange } from '../systems/combat';
+import { CERUMEN, ENEMIES, ITEMS, WEAPONS, gearLight, type EnemyDef } from '../data/gameData';
+import { darknessAtRow, equipmentLight, lightRadius } from '../systems/lighting';
+import { calcDamage, contactDamage, hitChance, nearestInRange, rollHit } from '../systems/combat';
 import { addExp } from '../systems/progression';
+import { facingFrom, type Facing } from '../systems/input';
 import { addItem, bus, derived, ear, itemCount, progress, store } from '../game/store';
 import { writeSave } from '../game/storage';
 
@@ -31,6 +33,11 @@ interface CerumenState {
 const CONVEYOR_SPEED = 16; // 外耳道の床が外向き（画面下向き）に流れる速さ px/秒（演出：MED-EAC-04）
 const INVULN = 0.8;
 const RESPAWN_SEC = 45;
+const DUST_INTERVAL = 0.12; // 走りの煙を出す間隔（秒）
+const DUST_MIN_INPUT = 0.6; // スティックをこれ以上倒しているときだけ煙を出す
+const DARK_SIZE = 640; // 暗幕テクスチャの一辺（ワールド px）。画面より十分大きくする
+const DARK_COLOR = '22, 8, 12'; // 暗い赤褐色（皮膚の中にいる感じ）
+const LIGHT_FORWARD = 10; // 明かりの中心を向いている方向へずらす量（px）
 
 export class FieldScene extends Phaser.Scene {
   private mapData!: MapData;
@@ -43,11 +50,15 @@ export class FieldScene extends Phaser.Scene {
   private professor!: Phaser.Physics.Arcade.Image;
   private desk!: Phaser.Physics.Arcade.Image;
   private flakes: Phaser.GameObjects.Image[] = [];
+  private darkness!: Phaser.GameObjects.Image;
+  private darkTex!: Phaser.Textures.CanvasTexture;
+  private drawnRadius = -1;
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private stick = new Phaser.Math.Vector2(0, 0);
   private attackHeld = false;
   private facing = new Phaser.Math.Vector2(0, -1);
+  private dir: Facing = 'down'; // 主人公の見た目の向き（4方向）
 
   private attackCd = 0;
   private specialCd = 0;
@@ -55,6 +66,7 @@ export class FieldScene extends Phaser.Scene {
   private slowUntil = 0;
   private knock = new Phaser.Math.Vector2(0, 0);
   private knockT = 0;
+  private dustT = 0;
   private dead = false;
 
   private regionId = '';
@@ -92,8 +104,14 @@ export class FieldScene extends Phaser.Scene {
     const pb = this.player.body as Body;
     pb.setSize(10, 7).setOffset(3, 9);
     this.player.setCollideWorldBounds(true);
-    if (!this.anims.exists('walk')) {
-      this.anims.create({ key: 'walk', frames: [{ key: 'hero0' }, { key: 'hero1' }], frameRate: 7, repeat: -1 });
+    // 歩きアニメ（正面・背中・横）。左向きは横向きを反転して使う
+    const walkAnims: [string, string, string][] = [
+      ['walk_down', 'hero0', 'hero1'],
+      ['walk_up', 'hero_up0', 'hero_up1'],
+      ['walk_side', 'hero_side0', 'hero_side1'],
+    ];
+    for (const [key, a, b] of walkAnims) {
+      if (!this.anims.exists(key)) this.anims.create({ key, frames: [{ key: a }, { key: b }], frameRate: 7, repeat: -1 });
     }
     this.physics.add.collider(this.player, this.layer);
 
@@ -138,6 +156,13 @@ export class FieldScene extends Phaser.Scene {
       this.resetFlake(f, true);
       this.flakes.push(f);
     }
+
+    // --- 暗さ（暗幕に明かりの穴をあける） ---
+    this.darkTex = (this.textures.exists('darkness')
+      ? this.textures.get('darkness')
+      : this.textures.createCanvas('darkness', DARK_SIZE, DARK_SIZE)) as Phaser.Textures.CanvasTexture;
+    this.darkness = this.add.image(0, 0, 'darkness').setDepth(9000);
+    this.updateLight();
 
     // --- カメラ ---
     const cam = this.cameras.main;
@@ -210,6 +235,7 @@ export class FieldScene extends Phaser.Scene {
     this.handleAttack();
     this.updateEnemies(dt);
     this.updateFlakes(dt);
+    this.updateLight();
     this.checkProximity();
     this.handleRespawns();
 
@@ -256,11 +282,47 @@ export class FieldScene extends Phaser.Scene {
 
     if (moving) {
       this.facing.set(vx, vy).normalize();
-      if (Math.abs(vx) > 0.1) this.player.setFlipX(vx < 0);
-      if (this.player.anims.currentAnim?.key !== 'walk' || !this.player.anims.isPlaying) this.player.play('walk');
-    } else if (this.player.anims.isPlaying) {
-      this.player.stop();
-      this.player.setTexture('hero0');
+      this.dir = facingFrom(vx, vy, this.dir);
+    }
+    this.applyDirSprite(moving);
+
+    // 走りの煙（見た目のみ。速度・当たり判定には影響しない）
+    this.dustT -= _dt;
+    if (moving && Math.min(1, len) >= DUST_MIN_INPUT && this.knockT <= 0 && this.dustT <= 0) {
+      this.dustT = DUST_INTERVAL;
+      this.spawnDust();
+    }
+  }
+
+  /** 足元の進行方向と反対側に小さな煙を出す */
+  private spawnDust(): void {
+    const outdoor = !regionAtRow(Math.floor(this.player.y / TILE)).canal;
+    const x = this.player.x - this.facing.x * 6 + (Math.random() - 0.5) * 3;
+    const y = this.player.y + 6 - this.facing.y * 4;
+    const d = this.add.image(x, y, 'fx_dust').setDepth(this.player.depth - 1).setScale(0.6).setAlpha(outdoor ? 0.95 : 0.8);
+    this.tweens.add({
+      targets: d,
+      x: x - this.facing.x * 5,
+      y: y - this.facing.y * 5 - 2,
+      scale: 1.3,
+      alpha: 0,
+      duration: 350,
+      ease: 'Quad.easeOut',
+      onComplete: () => d.destroy(),
+    });
+  }
+
+  /** 向き（this.dir）に合わせて主人公の絵を切り替える。止まっているときは1コマ目 */
+  private applyDirSprite(moving: boolean): void {
+    const group = this.dir === 'left' || this.dir === 'right' ? 'side' : this.dir;
+    this.player.setFlipX(this.dir === 'left');
+    const anim = `walk_${group}`;
+    if (moving) {
+      if (this.player.anims.currentAnim?.key !== anim || !this.player.anims.isPlaying) this.player.play(anim);
+    } else {
+      if (this.player.anims.isPlaying) this.player.stop();
+      const idle = group === 'down' ? 'hero0' : `hero_${group}0`;
+      if (this.player.texture.key !== idle) this.player.setTexture(idle);
     }
   }
 
@@ -300,7 +362,9 @@ export class FieldScene extends Phaser.Scene {
     }
     this.attackCd = w.cooldown;
     this.facing.set(target.x - px, target.y - py).normalize();
-    if (Math.abs(this.facing.x) > 0.1) this.player.setFlipX(this.facing.x < 0);
+    // 攻撃した敵の方を向く
+    this.dir = facingFrom(this.facing.x, this.facing.y, this.dir, 0);
+    this.applyDirSprite(this.player.anims.isPlaying);
     this.showFx(target.x, target.y, w.type);
     if (target.kind === 'enemy') this.hitEnemy(target.obj, 1);
     else this.hitCerumen(target.obj, CERUMEN.suctionDamage);
@@ -325,6 +389,11 @@ export class FieldScene extends Phaser.Scene {
     const st = s.getData('st') as EnemyState;
     const w = this.weapon();
     const dv = derived();
+    // 命中判定（吸引の杖は必中）
+    if (!rollHit(hitChance(ear().stats.foc, st.def.evade, w.sureHit), Math.random)) {
+      this.popNumber(s.x, s.y - 8, 'MISS', '#b8b0c0');
+      return;
+    }
     const r = calcDamage({
       atk: dv.atk,
       weaponMult: w.mult * multScale,
@@ -728,6 +797,31 @@ export class FieldScene extends Phaser.Scene {
   }
 
   // ---------------- 演出 ----------------
+
+  /** 明かりの半径・場所の暗さ・向きに合わせて暗幕を更新する */
+  private updateLight(): void {
+    const e = ear();
+    const r = lightRadius(e.stats.foc, equipmentLight(e.equipment, gearLight));
+    if (r !== this.drawnRadius) this.drawDarkness(r);
+    const d = darknessAtRow(this.player.y / TILE);
+    this.darkness.setVisible(d > 0.01).setAlpha(d);
+    this.darkness.setPosition(this.player.x + this.facing.x * LIGHT_FORWARD, this.player.y + this.facing.y * LIGHT_FORWARD);
+  }
+
+  /** 中央に明かりの穴（ふちをぼかした円）がある暗幕を描く */
+  private drawDarkness(radius: number): void {
+    this.drawnRadius = radius;
+    const ctx = this.darkTex.getContext();
+    const c = DARK_SIZE / 2;
+    ctx.clearRect(0, 0, DARK_SIZE, DARK_SIZE);
+    const g = ctx.createRadialGradient(c, c, radius * 0.45, c, c, radius);
+    g.addColorStop(0, `rgba(${DARK_COLOR}, 0)`);
+    g.addColorStop(0.6, `rgba(${DARK_COLOR}, 0.55)`);
+    g.addColorStop(1, `rgba(${DARK_COLOR}, 1)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, DARK_SIZE, DARK_SIZE);
+    this.darkTex.refresh();
+  }
 
   private resetFlake(f: Phaser.GameObjects.Image, anywhere: boolean): void {
     const cam = this.cameras.main;
