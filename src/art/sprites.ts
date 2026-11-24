@@ -1,5 +1,6 @@
 // ドット絵データ（すべて自作。外部素材は使わない）
 // 16×16。左半分（8列）を書き、右半分は左右反転でつくる（mirror: true）。
+// 主人公（16×24）は hero.ts で管理する。
 // '.' は透明。文字ごとの色は palette で指定する。
 
 export interface SpriteDef {
@@ -10,76 +11,7 @@ export interface SpriteDef {
 
 const OUTLINE = '#2a1a2a';
 
-const heroPalette = {
-  k: OUTLINE, w: '#f4f4f0', s: '#f2c6a0', h: '#3b2a20', l: '#ffe066', g: '#8a96a8', b: '#4a7bd0', p: '#2d3f73',
-};
-
-const heroTop = [
-  '........',
-  '....kkkk',
-  '...kgggl',
-  '..kggggg',
-  '..khhhhh',
-  '..khssss',
-  '..ksssks',
-  '..ksssss',
-  '...kssss',
-  '..kwwwbb',
-  '.kwwwwwb',
-  '.kswwwww',
-  '..kwwwww',
-  '..kwwwww',
-];
-
-// 背中（左半分）
-const heroBack = [
-  '........',
-  '....kkkk',
-  '...kgggg',
-  '..kggggg',
-  '..khhhhh',
-  '..khhhhh',
-  '..khhhhh',
-  '..khhhhh',
-  '...kssss',
-  '..kwwwww',
-  '.kwwwwww',
-  '.kswwwww',
-  '..kwwwww',
-  '..kwwwww',
-];
-
-// 横向き（16列そのまま。右向き）
-const heroSide = [
-  '................',
-  '.....kkkkkk.....',
-  '....kggggggkk...',
-  '...kgggggggll...',
-  '...khhhhhhhk....',
-  '...khhhhsssk....',
-  '...khhhssks.....',
-  '....khhsssss....',
-  '.....kssssk.....',
-  '....kwwwwbbk....',
-  '...kwwwwwwbk....',
-  '...kwwwswwwk....',
-  '...kwwwwwwwk....',
-  '....kwwwwwk.....',
-];
-
 export const SPRITES: Record<string, SpriteDef> = {
-  // 主人公（医師見習い）：白衣、ヘッドライト付きの帽子
-  hero0: { palette: heroPalette, mirror: true, rows: [...heroTop, '...kpk..', '...kk...'] },
-  hero1: { palette: heroPalette, mirror: true, rows: ['........', ...heroTop.slice(0, 13), '...kpkk.', '....kk..'] },
-
-  // 主人公・背中（上向き）
-  hero_up0: { palette: heroPalette, mirror: true, rows: [...heroBack, '...kpk..', '...kk...'] },
-  hero_up1: { palette: heroPalette, mirror: true, rows: ['........', ...heroBack.slice(0, 13), '...kpkk.', '....kk..'] },
-
-  // 主人公・横向き（右向き。左は反転して使う）。ヘッドライトが前を向く
-  hero_side0: { palette: heroPalette, rows: [...heroSide, '.....kpkpk......', '.....kk.kk......'] },
-  hero_side1: { palette: heroPalette, rows: ['................', ...heroSide.slice(0, 13), '....kp...pk.....', '...kk.....kk....'] },
-
   // 教授：白髪・眼鏡・ネクタイ
   professor: {
     mirror: true,

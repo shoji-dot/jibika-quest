@@ -1,6 +1,8 @@
 // ドット絵・タイルをコードで描いて Phaser のテクスチャとして登録する
 import type Phaser from 'phaser';
 import { SPRITES, expandRows } from './sprites';
+import { HERO_FRAMES, HERO_H, HERO_PALETTE, HERO_W, composeHero, heroTextureKey } from './hero';
+import { WEAPONS } from '../data/gameData';
 import { TILE } from '../data/map';
 
 function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
@@ -10,6 +12,19 @@ function makeCanvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingCo
   const ctx = c.getContext('2d')!;
   ctx.imageSmoothingEnabled = false;
   return [c, ctx];
+}
+
+/** 行データ（1文字＝1ドット）を描く */
+export function drawRows(ctx: CanvasRenderingContext2D, rows: string[], palette: Record<string, string>): void {
+  rows.forEach((row, y) => {
+    [...row].forEach((ch, x) => {
+      const col = palette[ch];
+      if (col) {
+        ctx.fillStyle = col;
+        ctx.fillRect(x, y, 1, 1);
+      }
+    });
+  });
 }
 
 function drawSprite(ctx: CanvasRenderingContext2D, key: string, ox = 0, oy = 0): void {
@@ -189,6 +204,14 @@ export function registerArt(scene: Phaser.Scene): void {
     const [c, ctx] = makeCanvas(16, 16);
     drawSprite(ctx, key);
     scene.textures.addCanvas(key, c);
+  }
+  // 主人公（16×24）：武器なし＋武器ごとの合成画像
+  for (const weaponId of [null, ...Object.keys(WEAPONS)]) {
+    for (const frame of HERO_FRAMES) {
+      const [c, ctx] = makeCanvas(HERO_W, HERO_H);
+      drawRows(ctx, composeHero(frame, weaponId), HERO_PALETTE);
+      scene.textures.addCanvas(heroTextureKey(frame, weaponId), c);
+    }
   }
   const [tc, tctx] = makeCanvas(TILE * TILE_PAINTERS.length, TILE);
   TILE_PAINTERS.forEach((paint, i) => paint(tctx, i * TILE));

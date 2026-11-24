@@ -1,6 +1,7 @@
 // フィールド（探索・戦闘）シーン
 import Phaser from 'phaser';
 import { registerArt } from '../art/art';
+import { HERO_H, heroTextureKey, type HeroFrame } from '../art/hero';
 import { buildMap, regionAtRow, ISTHMUS_CERUMEN_ROWS, MAP_H, MAP_W, TILE, WALKABLE, type MapData, type Spawn } from '../data/map';
 import { CERUMEN, ENEMIES, ITEMS, WEAPONS, gearLight, type EnemyDef } from '../data/gameData';
 import { darknessAtRow, equipmentLight, lightRadius } from '../systems/lighting';
@@ -100,18 +101,28 @@ export class FieldScene extends Phaser.Scene {
     const start = this.mapData.playerStart;
     const px = e.position.x >= 0 ? e.position.x : start.tx * TILE + 8;
     const py = e.position.y >= 0 ? e.position.y : start.ty * TILE + 8;
-    this.player = this.physics.add.sprite(px, py, 'hero0');
+    this.player = this.physics.add.sprite(px, py, heroTextureKey('down0', e.equipment.weapon));
+    // 16×24 の絵。座標の基準点は従来（16×16 の中心）と同じ「足元の少し上」に保つ
+    this.player.setOrigin(0.5, (HERO_H - 8) / HERO_H);
     const pb = this.player.body as Body;
-    pb.setSize(10, 7).setOffset(3, 9);
+    // 当たり判定（10×7）は従来と同じ位置：基準点の1px下から（v0.1.1 では 16×16 の上端から9px）
+    pb.setSize(10, 7).setOffset(3, HERO_H - 7);
     this.player.setCollideWorldBounds(true);
-    // 歩きアニメ（正面・背中・横）。左向きは横向きを反転して使う
-    const walkAnims: [string, string, string][] = [
-      ['walk_down', 'hero0', 'hero1'],
-      ['walk_up', 'hero_up0', 'hero_up1'],
-      ['walk_side', 'hero_side0', 'hero_side1'],
-    ];
-    for (const [key, a, b] of walkAnims) {
-      if (!this.anims.exists(key)) this.anims.create({ key, frames: [{ key: a }, { key: b }], frameRate: 7, repeat: -1 });
+    // 歩きアニメ（正面・背中・横 × 武器ごと）。左向きは横向きを反転して使う
+    for (const weaponId of Object.keys(WEAPONS)) {
+      for (const group of ['down', 'up', 'side'] as const) {
+        const key = `walk_${group}_${weaponId}`;
+        if (this.anims.exists(key)) continue;
+        this.anims.create({
+          key,
+          frames: [
+            { key: heroTextureKey(`${group}0` as HeroFrame, weaponId) },
+            { key: heroTextureKey(`${group}1` as HeroFrame, weaponId) },
+          ],
+          frameRate: 7,
+          repeat: -1,
+        });
+      }
     }
     this.physics.add.collider(this.player, this.layer);
 
@@ -316,12 +327,13 @@ export class FieldScene extends Phaser.Scene {
   private applyDirSprite(moving: boolean): void {
     const group = this.dir === 'left' || this.dir === 'right' ? 'side' : this.dir;
     this.player.setFlipX(this.dir === 'left');
-    const anim = `walk_${group}`;
+    const weaponId = ear().equipment.weapon; // 持っている武器の絵も切り替える
+    const anim = `walk_${group}_${weaponId}`;
     if (moving) {
       if (this.player.anims.currentAnim?.key !== anim || !this.player.anims.isPlaying) this.player.play(anim);
     } else {
       if (this.player.anims.isPlaying) this.player.stop();
-      const idle = group === 'down' ? 'hero0' : `hero_${group}0`;
+      const idle = heroTextureKey(`${group}0` as HeroFrame, weaponId);
       if (this.player.texture.key !== idle) this.player.setTexture(idle);
     }
   }
@@ -515,7 +527,7 @@ export class FieldScene extends Phaser.Scene {
     addItem(id, -1);
     const heal = ITEMS[id].heal ?? 0;
     e.hp = Math.min(max, e.hp + heal);
-    this.popNumber(this.player.x, this.player.y - 12, `+${heal}`, '#7dff9a');
+    this.popNumber(this.player.x, this.player.y - 20, `+${heal}`, '#7dff9a');
     bus.emit('hud');
   }
 
@@ -665,7 +677,7 @@ export class FieldScene extends Phaser.Scene {
     const e = ear();
     e.hp = Math.max(0, e.hp - dmg);
     this.invuln = INVULN;
-    this.popNumber(this.player.x, this.player.y - 12, `-${dmg}`, '#ff8080');
+    this.popNumber(this.player.x, this.player.y - 20, `-${dmg}`, '#ff8080');
     this.cameras.main.shake(80, 0.004);
     const dir = new Phaser.Math.Vector2(this.player.x - s.x, this.player.y - s.y).normalize();
     this.knock.set(dir.x * 140, dir.y * 140);

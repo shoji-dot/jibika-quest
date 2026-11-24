@@ -1,5 +1,5 @@
 // タイトル・名前入力・戦闘不能の画面（DOM）
-import { SPRITES, expandRows } from '../art/sprites';
+import { HERO_H, HERO_PALETTE, HERO_W, composeHero } from '../art/hero';
 import { createNewSave, decodeSaveCode, DEFAULT_NAME, NAME_MAX, normalizeName, type SaveData } from '../systems/save';
 import { newPlayerId, writeSave } from '../game/storage';
 import { bus } from '../game/store';
@@ -7,15 +7,15 @@ import { bus } from '../game/store';
 const screen = () => document.getElementById('screen')!;
 
 function heroCanvas(): HTMLCanvasElement {
-  const def = SPRITES.hero0;
+  // 武器なしの正面の絵（16×24）
   const c = document.createElement('canvas');
-  c.width = 16;
-  c.height = 16;
+  c.width = HERO_W;
+  c.height = HERO_H;
   c.className = 'title-hero';
   const ctx = c.getContext('2d')!;
-  expandRows(def).forEach((row, y) =>
+  composeHero('down0', null).forEach((row, y) =>
     [...row].forEach((ch, x) => {
-      const col = def.palette[ch];
+      const col = HERO_PALETTE[ch];
       if (col) {
         ctx.fillStyle = col;
         ctx.fillRect(x, y, 1, 1);
@@ -33,7 +33,7 @@ export function showTitle(existing: SaveData | null): Promise<SaveData> {
     el.innerHTML = `
       <div class="title-wrap">
         <div class="title-logo">耳鼻科クエスト</div>
-        <p class="title-sub">〜 聴界アウリスの響き 〜　試遊版 v0.1.1</p>
+        <p class="title-sub">〜 聴界アウリスの響き 〜　試遊版 v0.1.2</p>
         <div id="hero-slot"></div>
         <div class="title-btns">
           ${existing ? `<button class="pbtn primary wide" data-continue>つづきから（${escapeHtml(existing.series.name)} Lv${existing.apps.ear.level}）</button>` : ''}

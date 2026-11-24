@@ -80,6 +80,18 @@ export function initControls(): void {
   press('btn-swap', () => bus.emit('action', 'swap'));
   press('btn-item', () => bus.emit('action', 'item'));
 
+  // iOS でページ全体が引っ張られる動き（ゴムのように伸びて戻る）を止める。
+  // スクロールが必要なパネル（メニュー等）と入力欄の中だけは止めない。
+  document.addEventListener(
+    'touchmove',
+    (e) => {
+      const t = e.target as Element | null;
+      if (t?.closest('.panel, textarea, input')) return;
+      e.preventDefault();
+    },
+    { passive: false },
+  );
+
   // iOS のピンチズーム・ダブルタップズームを止める
   document.addEventListener('gesturestart', (e) => e.preventDefault());
   document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
