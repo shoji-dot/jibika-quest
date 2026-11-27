@@ -1,8 +1,9 @@
 // フィールド（探索・戦闘）シーン
 import Phaser from 'phaser';
 import { registerArt } from '../art/art';
+import { WorldPainter } from '../art/world';
 import { heroTextureKey, type HeroFrame } from '../art/hero';
-import { buildMap, regionAtRow, ISTHMUS_CERUMEN_ROWS, MAP_H, MAP_W, TILE, WALKABLE, type MapData, type Spawn } from '../data/map';
+import { buildMap, canalCenter, regionAtRow, REGIONS, ISTHMUS_CERUMEN_ROWS, MAP_H, MAP_W, TILE, WALKABLE, type MapData, type Spawn } from '../data/map';
 import { CERUMEN, ENEMIES, ITEMS, WEAPONS, gearLight, type EnemyDef } from '../data/gameData';
 import { darknessAtRow, equipmentLight, lightRadius } from '../systems/lighting';
 import { pixelZoom } from '../systems/view';
@@ -35,6 +36,10 @@ interface CerumenState {
 const CONVEYOR_SPEED = 16; // 外耳道の床が外向き（画面下向き）に流れる速さ px/秒（演出：MED-EAC-04）
 const INVULN = 0.8;
 const RESPAWN_SEC = 45;
+const VILLAGE_ROW = REGIONS.find((r) => r.id === 'village')!.y0; // 集落の先頭行（外耳道の入口）
+const NOTE_COUNT = 16; // 響きの粒の数
+const NOTE_SPEED = 18; // 響きの粒が奥（画面の上）へ進む速さ px/秒
+const NPC_SPOTS: [number, number][] = [[6, 129], [13, 130], [9, 134], [16, 127]]; // 響きの民の初期位置（タイル）
 const DUST_INTERVAL = 0.12; // 走りの煙を出す間隔（秒）
 const DUST_MIN_INPUT = 0.6; // スティックをこれ以上倒しているときだけ煙を出す
 const DARK_SIZE = 1024; // 暗幕テクスチャの一辺（ワールド px）。引いた画面（PC の1倍表示を含む）より十分大きくする
@@ -46,12 +51,14 @@ export class FieldScene extends Phaser.Scene {
   private layer!: Phaser.Tilemaps.TilemapLayer;
   private player!: Sprite;
   private enemies!: Phaser.Physics.Arcade.Group;
+  private npcs!: Phaser.Physics.Arcade.Group;
   private cerumens!: Phaser.Physics.Arcade.StaticGroup;
   private swells!: Phaser.Physics.Arcade.Group;
   private drops!: Phaser.Physics.Arcade.Group;
   private professor!: Phaser.Physics.Arcade.Image;
   private desk!: Phaser.Physics.Arcade.Image;
   private flakes: Phaser.GameObjects.Image[] = [];
+  private notes: Phaser.GameObjects.Image[] = [];
   private darkness!: Phaser.GameObjects.Image;
   private darkTex!: Phaser.Textures.CanvasTexture;
   private drawnRadius = -1;
@@ -95,6 +102,18 @@ export class FieldScene extends Phaser.Scene {
     const tileset = map.addTilesetImage('tiles', 'tiles', TILE, TILE, 0, 0)!;
     this.layer = map.createLayer(0, tileset, 0, 0) as Phaser.Tilemaps.TilemapLayer;
     this.layer.setCollisionByExclusion([...WALKABLE]);
+    this.layer.setDepth(-10);
+    // 背景（設計レビュー15）：マップ全体を1枚の絵として描く。当たり判定は上のタイル層のまま
+    if (!this.textures.exists('world')) {
+      const wp = new WorldPainter(this.mapData);
+      wp.paintTerrain();
+      wp.paintEardrum(canalCenter(2));
+      wp.paintVillage(VILLAGE_ROW);
+      this.textures.addCanvas('world', wp.toCanvas());
+    }
+    this.add.image(0, 0, 'world').setOrigin(0, 0).setDepth(-5);
+    // 外耳孔の門の梁（主人公より手前に描き、くぐって通る）
+    this.add.image(5 * TILE, VILLAGE_ROW * TILE - 9, 'arch').setOrigin(0, 0).setDepth(8000);
     this.physics.world.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
 
     // --- 主人公 ---
@@ -143,6 +162,20 @@ export class FieldScene extends Phaser.Scene {
     });
     this.physics.add.collider(this.player, this.cerumens, () => this.onBumpCerumen());
 
+    // --- 響きの民（集落の住人。歩き回るだけ・主人公とはぶつからない。設計レビュー15 W5） ---
+    if (!this.anims.exists('hibiki_bob')) {
+      this.anims.create({ key: 'hibiki_bob', frames: [{ key: 'hibiki0' }, { key: 'hibiki1' }], frameRate: 3, repeat: -1 });
+    }
+    this.npcs = this.physics.add.group();
+    for (const [tx, ty] of NPC_SPOTS) {
+      const n = this.npcs.create(tx * TILE + 8, ty * TILE + 8, 'hibiki0') as Sprite;
+      (n.body as Body).setSize(8, 6).setOffset(4, 8);
+      n.play({ key: 'hibiki_bob', startFrame: Math.random() < 0.5 ? 0 : 1 });
+      n.setData('t', Math.random() * 2);
+      n.setData('dir', new Phaser.Math.Vector2(0, 0));
+    }
+    this.physics.add.collider(this.npcs, this.layer);
+
     // --- 敵 ---
     this.enemies = this.physics.add.group();
     this.mapData.spawns.forEach((sp, gi) => {
@@ -166,6 +199,13 @@ export class FieldScene extends Phaser.Scene {
       const f = this.add.image(0, 0, 'fx_flake').setAlpha(0.55).setDepth(1);
       this.resetFlake(f, true);
       this.flakes.push(f);
+    }
+
+    // --- 響きの粒（音は奥へ。上皮の小片は外へ流れるので、その対比。設計レビュー15 W6） ---
+    for (let i = 0; i < NOTE_COUNT; i++) {
+      const n = this.add.image(0, 0, 'fx_note').setDepth(9001).setAlpha(0);
+      n.setData('life', 0);
+      this.notes.push(n);
     }
 
     // --- 暗さ（暗幕に明かりの穴をあける） ---
@@ -245,7 +285,9 @@ export class FieldScene extends Phaser.Scene {
     }
     this.handleAttack();
     this.updateEnemies(dt);
+    this.updateNpcs(dt);
     this.updateFlakes(dt);
+    this.updateNotes(dt);
     this.updateLight();
     this.checkProximity();
     this.handleRespawns();
@@ -615,6 +657,26 @@ export class FieldScene extends Phaser.Scene {
     }
   }
 
+  /** 響きの民：集落の中をゆっくり歩き回る（集落の外へは出ない） */
+  private updateNpcs(dt: number): void {
+    const top = (VILLAGE_ROW + 1) * TILE;
+    for (const n of this.npcs.getChildren() as Sprite[]) {
+      const b = n.body as Body;
+      let t = (n.getData('t') as number) - dt;
+      const dir = n.getData('dir') as Phaser.Math.Vector2;
+      if (t <= 0) {
+        t = 1.5 + Math.random() * 2.5;
+        if (Math.random() < 0.4) dir.set(0, 0);
+        else dir.setToPolar(Math.random() * Math.PI * 2, 1);
+      }
+      if (n.y < top + 8 && dir.y < 0) dir.y = Math.abs(dir.y); // 外耳道へは入らない
+      n.setData('t', t);
+      b.setVelocity(dir.x * 14, dir.y * 14);
+      if (Math.abs(dir.x) > 0.2) n.setFlipX(dir.x < 0);
+      n.setDepth(n.y);
+    }
+  }
+
   private killEnemy(s: Sprite): void {
     const st = s.getData('st') as EnemyState;
     this.puff(s.x, s.y, 0xffffff);
@@ -862,6 +924,35 @@ export class FieldScene extends Phaser.Scene {
       if (f.y > view.bottom + 4 || f.y < view.y - 40 || !f.visible) {
         if (Math.random() < 0.05 || f.y > view.bottom + 4 || f.y < view.y - 40) this.resetFlake(f, f.y < view.y - 40);
       }
+    }
+  }
+
+  /** 響きの粒：画面内の通れる場所に現れ、ゆらぎながら奥（上）へ進み、消える */
+  private updateNotes(dt: number): void {
+    const view = this.cameras.main.worldView;
+    for (const n of this.notes) {
+      let life = n.getData('life') as number;
+      if (life <= 0) {
+        // 出現：画面内のランダムな位置（通れる床の上）を探す
+        if (Math.random() > 0.03) continue;
+        const x = view.x + Math.random() * view.width;
+        const y = view.y + Math.random() * view.height;
+        const tx = Math.floor(x / TILE);
+        const ty = Math.floor(y / TILE);
+        if (ty < 0 || ty >= MAP_H || tx < 0 || tx >= MAP_W || !WALKABLE.has(this.mapData.tiles[ty][tx])) continue;
+        n.setPosition(x, y).setData('x0', x).setData('phase', Math.random() * 6);
+        life = 3 + Math.random() * 2;
+        n.setData('max', life);
+      }
+      life -= dt;
+      n.setData('life', life);
+      const max = n.getData('max') as number;
+      const age = max - life;
+      n.y -= NOTE_SPEED * dt;
+      n.x = (n.getData('x0') as number) + Math.sin(age * 2.2 + (n.getData('phase') as number)) * 3;
+      // 出てくるときと消えるときはゆっくり
+      const fade = Math.min(1, age / 0.6, Math.max(0, life) / 0.8);
+      n.setAlpha(0.75 * fade);
     }
   }
 

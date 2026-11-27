@@ -190,6 +190,37 @@ function registerEffects(scene: Phaser.Scene): void {
     for (const [x, y, r] of puffs) disc(x, y, r);
     scene.textures.addCanvas('fx_dust', c);
   }
+  // 響きの粒（光る小さな音符。設計レビュー15 W6）
+  {
+    const [c, ctx] = makeCanvas(7, 9);
+    ctx.fillStyle = 'rgba(255, 233, 160, 0.35)';
+    ctx.fillRect(0, 4, 5, 5);
+    ctx.fillStyle = '#fff3c4';
+    ctx.fillRect(1, 5, 3, 3);
+    ctx.fillRect(3, 0, 1, 6);
+    ctx.fillRect(4, 1, 2, 1);
+    ctx.fillRect(5, 2, 1, 1);
+    scene.textures.addCanvas('fx_note', c);
+  }
+  // 外耳孔の門の梁（主人公がその下をくぐる。設計レビュー15 W4）
+  {
+    const w = 11 * 16;
+    const [c, ctx] = makeCanvas(w, 12);
+    ctx.fillStyle = '#6a2a36';
+    ctx.fillRect(0, 2, w, 8);
+    ctx.fillStyle = '#b4606c';
+    ctx.fillRect(1, 3, w - 2, 5);
+    ctx.fillStyle = '#d8909a';
+    ctx.fillRect(1, 3, w - 2, 1);
+    // 中央の額（銘板）
+    ctx.fillStyle = '#2a1a2a';
+    ctx.fillRect(w / 2 - 16, 0, 32, 12);
+    ctx.fillStyle = '#f3e2c0';
+    ctx.fillRect(w / 2 - 15, 1, 30, 10);
+    ctx.fillStyle = '#8a5a3a';
+    for (let i = 0; i < 5; i++) ctx.fillRect(w / 2 - 11 + i * 5, 4, 3, 4);
+    scene.textures.addCanvas('arch', c);
+  }
   // 影
   {
     const [c, ctx] = makeCanvas(12, 4);

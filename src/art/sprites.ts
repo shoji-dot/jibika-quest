@@ -12,6 +12,50 @@ export interface SpriteDef {
 const OUTLINE = '#2a1a2a';
 
 export const SPRITES: Record<string, SpriteDef> = {
+  // 響きの民（音を運ぶ住人）：水色の音符の形の体（設計レビュー15 P3）。左右対称ではないため反転しない
+  hibiki0: {
+    palette: { k: '#2a1a2a', c: '#8fdcff', C: '#4aa8d8', w: '#ffffff' },
+    rows: [
+      '................',
+      '..........kk....',
+      '.........kCck...',
+      '.........kccCk..',
+      '.........kc.kCk.',
+      '.........kc..kk.',
+      '.........kc.....',
+      '.........kc.....',
+      '....kkkkkkc.....',
+      '...kccccccck....',
+      '..kcwkccwkcck...',
+      '..kccccccccck...',
+      '..kccCCCCcck....',
+      '...kkkkkkkk.....',
+      '................',
+      '................',
+    ],
+  },
+  hibiki1: {
+    palette: { k: '#2a1a2a', c: '#8fdcff', C: '#4aa8d8', w: '#ffffff' },
+    rows: [
+      '..........kk....',
+      '.........kCck...',
+      '.........kccCk..',
+      '.........kc.kCk.',
+      '.........kc..kk.',
+      '.........kc.....',
+      '.........kc.....',
+      '....kkkkkkc.....',
+      '...kccccccck....',
+      '..kcwkccwkcck...',
+      '..kccccccccck...',
+      '..kccCCCCcck....',
+      '...kkkkkkkk.....',
+      '................',
+      '................',
+      '................',
+    ],
+  },
+
   // 教授：白髪・眼鏡・ネクタイ
   professor: {
     mirror: true,
