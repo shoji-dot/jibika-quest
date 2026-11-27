@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { HERO_BASE, HERO_FRAMES, HERO_H, HERO_PALETTE, HERO_W, WEAPON_OVERLAYS, composeHero, heroTextureKey } from '../src/art/hero';
 import { WEAPONS } from '../src/data/gameData';
 
-describe('主人公のドット絵（16×24）', () => {
-  it('体の絵6枚がすべて 16×24', () => {
+describe('主人公のドット絵（2頭身・16×16）', () => {
+  it('体の絵6枚がすべて 16×16', () => {
     expect(HERO_FRAMES).toHaveLength(6);
     for (const f of HERO_FRAMES) {
       expect(HERO_BASE[f]).toHaveLength(HERO_H);

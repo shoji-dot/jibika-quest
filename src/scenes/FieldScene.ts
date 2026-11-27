@@ -1,10 +1,11 @@
 // フィールド（探索・戦闘）シーン
 import Phaser from 'phaser';
 import { registerArt } from '../art/art';
-import { HERO_H, heroTextureKey, type HeroFrame } from '../art/hero';
+import { heroTextureKey, type HeroFrame } from '../art/hero';
 import { buildMap, regionAtRow, ISTHMUS_CERUMEN_ROWS, MAP_H, MAP_W, TILE, WALKABLE, type MapData, type Spawn } from '../data/map';
 import { CERUMEN, ENEMIES, ITEMS, WEAPONS, gearLight, type EnemyDef } from '../data/gameData';
 import { darknessAtRow, equipmentLight, lightRadius } from '../systems/lighting';
+import { pixelZoom } from '../systems/view';
 import { calcDamage, contactDamage, hitChance, nearestInRange, rollHit } from '../systems/combat';
 import { addExp } from '../systems/progression';
 import { facingFrom, type Facing } from '../systems/input';
@@ -36,7 +37,7 @@ const INVULN = 0.8;
 const RESPAWN_SEC = 45;
 const DUST_INTERVAL = 0.12; // 走りの煙を出す間隔（秒）
 const DUST_MIN_INPUT = 0.6; // スティックをこれ以上倒しているときだけ煙を出す
-const DARK_SIZE = 640; // 暗幕テクスチャの一辺（ワールド px）。画面より十分大きくする
+const DARK_SIZE = 1024; // 暗幕テクスチャの一辺（ワールド px）。引いた画面（PC の1倍表示を含む）より十分大きくする
 const DARK_COLOR = '22, 8, 12'; // 暗い赤褐色（皮膚の中にいる感じ）
 const LIGHT_FORWARD = 10; // 明かりの中心を向いている方向へずらす量（px）
 
@@ -102,11 +103,10 @@ export class FieldScene extends Phaser.Scene {
     const px = e.position.x >= 0 ? e.position.x : start.tx * TILE + 8;
     const py = e.position.y >= 0 ? e.position.y : start.ty * TILE + 8;
     this.player = this.physics.add.sprite(px, py, heroTextureKey('down0', e.equipment.weapon));
-    // 16×24 の絵。座標の基準点は従来（16×16 の中心）と同じ「足元の少し上」に保つ
-    this.player.setOrigin(0.5, (HERO_H - 8) / HERO_H);
+    // 16×16 の絵（2頭身）。座標の基準点は絵の中心
     const pb = this.player.body as Body;
-    // 当たり判定（10×7）は従来と同じ位置：基準点の1px下から（v0.1.1 では 16×16 の上端から9px）
-    pb.setSize(10, 7).setOffset(3, HERO_H - 7);
+    // 当たり判定（10×7）：基準点の1px下から（v0.1.1〜v0.1.2 と同じ位置）
+    pb.setSize(10, 7).setOffset(3, 9);
     this.player.setCollideWorldBounds(true);
     // 歩きアニメ（正面・背中・横 × 武器ごと）。左向きは横向きを反転して使う
     for (const weaponId of Object.keys(WEAPONS)) {
@@ -527,7 +527,7 @@ export class FieldScene extends Phaser.Scene {
     addItem(id, -1);
     const heal = ITEMS[id].heal ?? 0;
     e.hp = Math.min(max, e.hp + heal);
-    this.popNumber(this.player.x, this.player.y - 20, `+${heal}`, '#7dff9a');
+    this.popNumber(this.player.x, this.player.y - 12, `+${heal}`, '#7dff9a');
     bus.emit('hud');
   }
 
@@ -677,7 +677,7 @@ export class FieldScene extends Phaser.Scene {
     const e = ear();
     e.hp = Math.max(0, e.hp - dmg);
     this.invuln = INVULN;
-    this.popNumber(this.player.x, this.player.y - 20, `-${dmg}`, '#ff8080');
+    this.popNumber(this.player.x, this.player.y - 12, `-${dmg}`, '#ff8080');
     this.cameras.main.shake(80, 0.004);
     const dir = new Phaser.Math.Vector2(this.player.x - s.x, this.player.y - s.y).normalize();
     this.knock.set(dir.x * 140, dir.y * 140);
@@ -887,10 +887,9 @@ export class FieldScene extends Phaser.Scene {
   }
 
   private applyZoom(): void {
-    const w = this.scale.gameSize.width;
-    // 横におよそ11〜12タイル見える整数倍率（小型 iPhone でも 2 倍以上）
-    const zoom = Math.max(2, Math.floor(w / (11 * TILE)));
-    this.cameras.main.setZoom(zoom);
+    // 描画は端末の画素単位。1ドット＝整数画素で、論理サイズで約1.33倍に見える倍率（設計レビュー13 M8）
+    const dpr = (this.registry.get('dpr') as number | undefined) ?? 1;
+    this.cameras.main.setZoom(pixelZoom(dpr));
   }
 
   // ---------------- セーブ ----------------
