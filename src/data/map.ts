@@ -6,6 +6,7 @@
 // 長さの比率・S字の形は演出。スケールは実物と無関係。
 
 import type { EnemyKind } from './gameData';
+import type { SpawnZone } from '../systems/spawning';
 
 export const TILE = 16;
 export const MAP_W = 20;
@@ -60,6 +61,25 @@ export interface Spawn {
   kind: EnemyKind;
   tx: number;
   ty: number;
+  /** 所属する出現エリア（SPAWN_ZONES の添字） */
+  zone: number;
+}
+
+/**
+ * 外耳道の出現エリア（設計レビュー17 R2）。
+ * 敵の数・初期位置は v0.1.4 と同じ。再出現の位置だけがエリア内に広がる。
+ */
+export const SPAWN_ZONES: SpawnZone[] = [
+  { id: 'cart_outer', label: '軟骨部・入口側', stage: 'cart', top: 104, bottom: 116 },
+  { id: 'cart_inner', label: '軟骨部・奥側', stage: 'cart', top: 84, bottom: 103 },
+  { id: 'bony_near', label: '骨部・手前', stage: 'bony', top: 50, bottom: 70 },
+  { id: 'bony_deep', label: '骨部・奥', stage: 'bony', top: 10, bottom: 49 },
+  { id: 'gate_guard', label: '鼓膜の門の前', stage: 'bony', top: 2, bottom: 7, baseSec: 60 },
+];
+
+/** 行が属する出現エリアの添字（どこにも属さなければ -1） */
+export function zoneOfRow(row: number): number {
+  return SPAWN_ZONES.findIndex((z) => row >= z.top && row <= z.bottom);
 }
 
 export interface MapData {
@@ -182,7 +202,7 @@ export function buildMap(seed = 20261123): MapData {
     const cx = canalCenter(row);
     const hw = Math.max(0, canalHalfWidth(row) - 1);
     const tx = dx !== undefined ? cx + dx : cx - hw + Math.floor(rnd() * (hw * 2 + 1));
-    return { kind, tx, ty: row };
+    return { kind, tx, ty: row, zone: zoneOfRow(row) };
   };
   const spawns: Spawn[] = [
     // 軟骨部

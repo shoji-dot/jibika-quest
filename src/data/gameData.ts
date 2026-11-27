@@ -62,6 +62,7 @@ export interface EnemyDef {
   sight: number; // 発見距離 px
   exp: number;
   group: number; // 何体1組で出るか
+  respawnSec: number; // 組が全滅してから再出現までの基本時間（秒）。ステージの倍率を掛ける（設計レビュー17 R2）
   weak: Partial<Record<WeaponType, number>>; // 相性倍率
   medicalIds: string[];
 }
@@ -69,22 +70,22 @@ export interface EnemyDef {
 export const ENEMIES: Record<EnemyKind, EnemyDef> = {
   hoteri: {
     kind: 'hoteri', name: 'ホテリ', motif: '炎症',
-    hp: 18, atk: 4, def: 0, evade: 0, speed: 28, wander: 14, sight: 70, exp: 6, group: 1,
+    hp: 18, atk: 4, def: 0, evade: 0, speed: 28, wander: 14, sight: 70, exp: 6, group: 1, respawnSec: 20,
     weak: { blade: 1.0, suction: 1.0 }, medicalIds: [],
   },
   pneumo: {
     kind: 'pneumo', name: 'ニューモ兄弟', motif: '肺炎球菌',
-    hp: 15, atk: 5, def: 0, evade: 0.05, speed: 42, wander: 18, sight: 80, exp: 7, group: 2,
+    hp: 15, atk: 5, def: 0, evade: 0.05, speed: 42, wander: 18, sight: 80, exp: 7, group: 2, respawnSec: 25,
     weak: { blade: 1.2, suction: 0.8 }, medicalIds: ['MED-AOM-02'],
   },
   hflu: {
     kind: 'hflu', name: 'ヘモフィ', motif: 'インフルエンザ菌（無莢膜型）',
-    hp: 9, atk: 3, def: 0, evade: 0.15, speed: 60, wander: 30, sight: 90, exp: 4, group: 3,
+    hp: 9, atk: 3, def: 0, evade: 0.15, speed: 60, wander: 30, sight: 90, exp: 4, group: 3, respawnSec: 15,
     weak: { blade: 0.9, suction: 1.5 }, medicalIds: ['MED-AOM-02'],
   },
   morax: {
     kind: 'morax', name: 'モラクセ姉妹', motif: 'モラクセラ・カタラーリス',
-    hp: 20, atk: 4, def: 1, evade: 0.05, speed: 36, wander: 16, sight: 80, exp: 7, group: 2,
+    hp: 20, atk: 4, def: 1, evade: 0.05, speed: 36, wander: 16, sight: 80, exp: 7, group: 2, respawnSec: 25,
     weak: { blade: 1.2, suction: 0.9 }, medicalIds: ['MED-AOM-02'],
   },
 };

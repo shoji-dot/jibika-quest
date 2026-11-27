@@ -1,7 +1,7 @@
 {
   "name": "jibika-quest",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "耳鼻科クエスト（仮称）— iPhone縦画面の2DアクションRPG（PWA）",
   "type": "module",
   "scripts": {

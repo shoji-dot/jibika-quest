@@ -3,7 +3,8 @@ import Phaser from 'phaser';
 import { registerArt } from '../art/art';
 import { WorldPainter } from '../art/world';
 import { heroTextureKey, type HeroFrame } from '../art/hero';
-import { buildMap, canalCenter, regionAtRow, REGIONS, ISTHMUS_CERUMEN_ROWS, MAP_H, MAP_W, TILE, WALKABLE, type MapData, type Spawn } from '../data/map';
+import { buildMap, canalCenter, regionAtRow, REGIONS, ISTHMUS_CERUMEN_ROWS, MAP_H, MAP_W, SPAWN_ZONES, T, TILE, WALKABLE, type MapData, type Spawn } from '../data/map';
+import { pickRespawnTile, respawnSeconds, zoneCandidates } from '../systems/spawning';
 import { CERUMEN, ENEMIES, ITEMS, WEAPONS, gearLight, type EnemyDef } from '../data/gameData';
 import { darknessAtRow, equipmentLight, lightRadius } from '../systems/lighting';
 import { pixelZoom } from '../systems/view';
@@ -35,7 +36,6 @@ interface CerumenState {
 
 const CONVEYOR_SPEED = 16; // 外耳道の床が外向き（画面下向き）に流れる速さ px/秒（演出：MED-EAC-04）
 const INVULN = 0.8;
-const RESPAWN_SEC = 45;
 const VILLAGE_ROW = REGIONS.find((r) => r.id === 'village')!.y0; // 集落の先頭行（外耳道の入口）
 const NOTE_COUNT = 16; // 響きの粒の数
 const NOTE_SPEED = 18; // 響きの粒が奥（画面の上）へ進む速さ px/秒
@@ -73,8 +73,6 @@ export class FieldScene extends Phaser.Scene {
   private specialCd = 0;
   private invuln = 0;
   private slowUntil = 0;
-  private knock = new Phaser.Math.Vector2(0, 0);
-  private knockT = 0;
   private dustT = 0;
   private dead = false;
 
@@ -84,7 +82,8 @@ export class FieldScene extends Phaser.Scene {
   private gateShown = false;
   private bladeHintAt = -99;
   private groupsDead = new Map<number, number>(); // グループ番号 → 全滅した時刻
-  private groupSpawn = new Map<number, Spawn>();
+  private groupSpawn = new Map<number, Spawn>(); // 初期配置（倒れて戻るときに使う）
+  private zoneCands: { tx: number; ty: number }[][] = []; // 出現エリアごとの再出現候補タイル
   private autosaveT = 0;
   private hudT = 0;
   private unsubs: (() => void)[] = [];
@@ -178,6 +177,9 @@ export class FieldScene extends Phaser.Scene {
 
     // --- 敵 ---
     this.enemies = this.physics.add.group();
+    const blocked = new Set(this.mapData.cerumen.map((c) => `${c.tx},${c.ty}`));
+    const isFloor = (t: number) => t === T.SKIN_FLOOR || t === T.BONE_FLOOR;
+    this.zoneCands = SPAWN_ZONES.map((z) => zoneCandidates(this.mapData.tiles, z, isFloor, blocked));
     this.mapData.spawns.forEach((sp, gi) => {
       this.groupSpawn.set(gi, sp);
       this.spawnGroup(gi, sp);
@@ -272,7 +274,6 @@ export class FieldScene extends Phaser.Scene {
     this.attackCd = Math.max(0, this.attackCd - dt);
     this.specialCd = Math.max(0, this.specialCd - dt);
     this.invuln = Math.max(0, this.invuln - dt);
-    this.knockT = Math.max(0, this.knockT - dt);
 
     this.movePlayer(dt);
     this.updateRegion(false);
@@ -326,12 +327,9 @@ export class FieldScene extends Phaser.Scene {
     if (this.time.now < this.slowUntil) speed *= 0.55;
 
     const body = this.player.body as Body;
-    if (this.knockT > 0) {
-      body.setVelocity(this.knock.x, this.knock.y);
-    } else {
-      const flow = regionAtRow(Math.floor(this.player.y / TILE)).canal ? CONVEYOR_SPEED : 0;
-      body.setVelocity(vx * speed, vy * speed + flow);
-    }
+    // 被ダメージ時も押し戻さない（設計レビュー17 R1）。操作はそのまま効く
+    const flow = regionAtRow(Math.floor(this.player.y / TILE)).canal ? CONVEYOR_SPEED : 0;
+    body.setVelocity(vx * speed, vy * speed + flow);
 
     if (moving) {
       this.facing.set(vx, vy).normalize();
@@ -341,7 +339,7 @@ export class FieldScene extends Phaser.Scene {
 
     // 走りの煙（見た目のみ。速度・当たり判定には影響しない）
     this.dustT -= _dt;
-    if (moving && Math.min(1, len) >= DUST_MIN_INPUT && this.knockT <= 0 && this.dustT <= 0) {
+    if (moving && Math.min(1, len) >= DUST_MIN_INPUT && this.dustT <= 0) {
       this.dustT = DUST_INTERVAL;
       this.spawnDust();
     }
@@ -722,13 +720,21 @@ export class FieldScene extends Phaser.Scene {
     bus.emit('hud');
   }
 
+  /**
+   * 組ごとに再出現（設計レビュー17 R2）。
+   * 全滅してから「敵ごとの基本時間 × ステージの倍率」秒後、同じ出現エリアの中で
+   * 主人公から 64px 以上離れた場所に出る。候補がなければ次のフレームで再挑戦。
+   */
   private handleRespawns(): void {
     const now = this.time.now;
     for (const [gi, t] of this.groupsDead) {
-      if (now - t < RESPAWN_SEC * 1000) continue;
       const sp = this.groupSpawn.get(gi)!;
-      const d = Math.hypot(this.player.x - (sp.tx * TILE + 8), this.player.y - (sp.ty * TILE + 8));
-      if (d > 170) this.spawnGroup(gi, sp);
+      const sec = respawnSeconds(ENEMIES[sp.kind].respawnSec, SPAWN_ZONES[sp.zone]);
+      if (now - t < sec * 1000) continue;
+      const at = pickRespawnTile(this.zoneCands[sp.zone] ?? [], this.player.x, this.player.y, TILE, Math.random);
+      if (!at) continue;
+      this.spawnGroup(gi, { ...sp, tx: at.tx, ty: at.ty });
+      this.puff(at.tx * TILE + 8, at.ty * TILE + 8, 0xffc8d8); // 出てくるときの煙
     }
   }
 
@@ -741,9 +747,6 @@ export class FieldScene extends Phaser.Scene {
     this.invuln = INVULN;
     this.popNumber(this.player.x, this.player.y - 12, `-${dmg}`, '#ff8080');
     this.cameras.main.shake(80, 0.004);
-    const dir = new Phaser.Math.Vector2(this.player.x - s.x, this.player.y - s.y).normalize();
-    this.knock.set(dir.x * 140, dir.y * 140);
-    this.knockT = 0.14;
     bus.emit('hud');
     if (e.hp <= 0) this.die();
   }
